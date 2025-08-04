@@ -1,0 +1,27 @@
+<!-- templates/index.html -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>古墳検出アプリ</title>
+</head>
+<body>
+    <h1>古墳再発見（YOLOv5）</h1>
+
+    <form method="POST">
+        <button type="submit">推論実行（dem_image.png）</button>
+    </form>
+
+    {% if result %}
+        <h2>結果：</h2>
+        <img src="{{ image_path }}" alt="推論結果画像" width="600">
+        <h3>検出数: {{ detections|length }}</h3>
+        <ul>
+            {% for det in detections %}
+                <li>座標: {{ det[:4] }}, 確信度: {{ det[4]|round(2) }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>
