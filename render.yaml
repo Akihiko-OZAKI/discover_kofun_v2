@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: discover-kofun
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python3 app.py"
+    runtime: python3
+    autoDeploy: true
