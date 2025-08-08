@@ -37,6 +37,8 @@ uploads/*
 !uploads/.gitkeep
 static/results/*
 !static/results/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
 test_results/
 second_test_results/
 simple_test_results/
@@ -45,6 +47,8 @@ colab_ready_dataset/
 colab_real_dataset/
 collected_data/
 real_kofun_data/
+existing_dem_data/
+sakitama_ultra_test/
 
 # Temporary files
 *.log
