@@ -52,6 +52,5 @@ real_kofun_data/
 .DS_Store
 Thumbs.db
 
-# Model weights
-weights/*.pt
+# Model weights (excluding best.pt)
 weights/*.pth
