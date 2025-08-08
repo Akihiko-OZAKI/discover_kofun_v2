@@ -40,7 +40,9 @@ class KofunValidationSystem:
         
         self.model = DetectMultiBackend(weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((640, 640), s=self.stride)
+        self.imgsz = check_img_size((768, 768), s=self.stride)
+        # CUDA 環境では半精度を使用（CPU の場合は自動で無効）
+        self.half = self.device.type != 'cpu'
         
         self.model.eval()
         self.model.warmup(imgsz=(1 if self.pt else 1, 3, *self.imgsz))
@@ -175,30 +177,59 @@ class KofunValidationSystem:
         img = img.transpose((2, 0, 1))[::-1]
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
-        img = img.float()
+        img = img.half() if getattr(self, 'half', False) else img.float()
         img /= 255.0
         if len(img.shape) == 3:
             img = img[None]
         
         # 複数の閾値で検出
         all_detections = []
-        conf_thresholds = [0.1, 0.2, 0.3]
+        conf_thresholds = [0.2, 0.3]
+        H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
+            # 通常推論
             pred = self.model(img, augment=False, visualize=False)
-            pred = non_max_suppression(pred, conf_thres, 0.45, classes=None, max_det=20)
+            pred = non_max_suppression(pred, conf_thres, 0.50, classes=None, max_det=50)
+
+            # 水平フリップTTA
+            img_flip = torch.flip(img.clone(), dims=[3])
+            pred_flip = self.model(img_flip, augment=False, visualize=False)
+            pred_flip = non_max_suppression(pred_flip, conf_thres, 0.50, classes=None, max_det=50)
             
+            # 通常推論の取り込み
             for i, det in enumerate(pred):
                 if len(det):
                     det[:, :4] = scale_boxes(img[i].shape[1:], det[:, :4], image.shape).round()
                     for *xyxy, conf, cls in det:
-                        # YOLO座標を中心座標に変換
                         x1, y1, x2, y2 = xyxy
-                        x_center = (x1 + x2) / 2 / image.shape[1]
-                        y_center = (y1 + y2) / 2 / image.shape[0]
-                        width = (x2 - x1) / image.shape[1]
-                        height = (y2 - y1) / image.shape[0]
-                        
+                        x_center = (x1 + x2) / 2 / W
+                        y_center = (y1 + y2) / 2 / H
+                        width = (x2 - x1) / W
+                        height = (y2 - y1) / H
+                        all_detections.append({
+                            'x_center': x_center,
+                            'y_center': y_center,
+                            'width': width,
+                            'height': height,
+                            'confidence': conf.item(),
+                            'class': cls.item(),
+                            'threshold': conf_thres
+                        })
+
+            # フリップ推論の取り込み（元画像座標へ戻す）
+            for i, det in enumerate(pred_flip):
+                if len(det):
+                    det[:, :4] = scale_boxes(img_flip[i].shape[1:], det[:, :4], image.shape).round()
+                    for *xyxy, conf, cls in det:
+                        x1, y1, x2, y2 = xyxy
+                        # 左右反転を元に戻す
+                        x1_new = W - x2
+                        x2_new = W - x1
+                        x_center = (x1_new + x2_new) / 2 / W
+                        y_center = (y1 + y2) / 2 / H
+                        width = (x2_new - x1_new) / W
+                        height = (y2 - y1) / H
                         all_detections.append({
                             'x_center': x_center,
                             'y_center': y_center,
