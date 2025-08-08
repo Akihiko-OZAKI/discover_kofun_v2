@@ -2,7 +2,6 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('yolov5'))  # これでyolov5がパスに入る
 
-from detect import run
 from flask import Flask, render_template, request, redirect, jsonify
 from werkzeug.utils import secure_filename
 import cv2
