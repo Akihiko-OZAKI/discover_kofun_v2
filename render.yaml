@@ -3,12 +3,13 @@ services:
     name: discover-kofun-v2
     env: python
     buildCommand: |
+      pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
       python -c "import torch; print('PyTorch version:', torch.__version__)"
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: PYTHON_VERSION
-        value: 3.8.12
+        value: 3.11.0
       - key: FLASK_ENV
         value: production
     healthCheckPath: /
