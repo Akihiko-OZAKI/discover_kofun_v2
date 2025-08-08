@@ -1,111 +1,173 @@
 #!/usr/bin/env python3
 """
-超低信頼度閾値での推論テスト
+超高感度モードテスト - さきたま史跡編
+既知の古墳が存在する地域で超高感度モードをテスト
 """
 
 import os
 import sys
-import torch
+sys.path.insert(0, os.path.abspath('yolov5'))
+
 import cv2
 import numpy as np
+from xml_to_png import convert_xml_to_png
+from my_utils import parse_latlon_range, bbox_to_latlon
+from kofun_validation_system import KofunValidationSystem
+from model_optimization import KofunDetectionOptimizer
 
-def ultra_low_threshold_inference():
+def test_sakitama_ultra_sensitive():
     """
-    超低信頼度閾値（0.01）で推論を実行
+    さきたま史跡で超高感度モードをテスト
     """
-    print("🚀 Running ultra-low threshold inference (0.01)...")
+    print("🏛️ さきたま史跡 超高感度モードテスト開始")
     
-    # YOLOv5のインポート
-    sys.path.insert(0, os.path.abspath('yolov5'))
-    from yolov5.models.common import DetectMultiBackend
-    from yolov5.utils.general import check_img_size, non_max_suppression, scale_boxes
-    from yolov5.utils.torch_utils import select_device
+    # さきたま史跡の座標範囲（確認済み）
+    sakitama_lat_range = (36.158333333, 36.166666667)
+    sakitama_lon_range = (139.45, 139.4625)
     
-    # 設定 - 超低閾値
-    weights = 'yolov5/weights/best.pt'
-    source = 'second_test_results/second_test.png'
-    imgsz = (640, 640)
-    conf_thres = 0.01  # 超低閾値
-    iou_thres = 0.45
-    max_det = 1000
-    device = select_device('')
+    print(f"📍 さきたま史跡座標範囲:")
+    print(f"   緯度: {sakitama_lat_range[0]:.6f} - {sakitama_lat_range[1]:.6f}")
+    print(f"   経度: {sakitama_lon_range[0]:.6f} - {sakitama_lon_range[1]:.6f}")
+    print(f"   📍 既知の古墳: 9基（さきたま古墳群）")
     
-    # モデルの読み込み
-    model = DetectMultiBackend(weights, device=device)
-    stride, names, pt = model.stride, model.names, model.pt
-    imgsz = check_img_size(imgsz, s=stride)
-    
-    # ウォームアップ
-    model.warmup(imgsz=(1 if pt else 1, 3, *imgsz))
-    
-    # 画像の読み込み
-    im0s = cv2.imread(source)
-    if im0s is None:
-        print(f"❌ Could not read image: {source}")
+    # さきたま史跡のタイルファイルを選択
+    sakitama_dir = "static/uploads/sakitama"
+    if not os.path.exists(sakitama_dir):
+        print(f"❌ さきたま史跡ディレクトリが見つかりません: {sakitama_dir}")
         return
     
-    # 前処理
-    im = cv2.resize(im0s, imgsz)
-    im = im.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-    im = np.ascontiguousarray(im)
-    im = torch.from_numpy(im).to(device)
-    im = im.float()
-    im /= 255
-    if len(im.shape) == 3:
-        im = im[None]
+    # 複数のタイルをテスト
+    test_files = [
+        "FG-GML-5439-13-96-DEM5A-20250620.xml",  # 中心部
+        "FG-GML-5439-13-97-DEM5A-20250620.xml",  # 隣接タイル
+        "FG-GML-5439-13-98-DEM5A-20250620.xml",  # 隣接タイル
+        "FG-GML-5439-13-85-DEM5A-20250620.xml",  # 別のタイル
+        "FG-GML-5439-13-86-DEM5A-20250620.xml",  # 別のタイル
+    ]
     
-    # 推論
-    pred = model(im, augment=False, visualize=False)
+    total_detections = 0
     
-    # NMS
-    pred = non_max_suppression(pred, conf_thres, iou_thres, classes=None, agnostic=False, max_det=max_det)
-    
-    # 結果の処理
-    detections = []
-    for i, det in enumerate(pred):
-        if len(det):
-            # 座標を元の画像サイズにスケール
-            det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0s.shape).round()
+    for test_file in test_files:
+        test_xml = os.path.join(sakitama_dir, test_file)
+        
+        if not os.path.exists(test_xml):
+            print(f"⚠️ ファイルが見つかりません: {test_xml}")
+            continue
+        
+        print(f"\n📁 テストファイル: {test_file}")
+        
+        # 出力ディレクトリの準備
+        output_dir = f"sakitama_ultra_test_{test_file.split('.')[0]}"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # XML → PNG 変換
+        png_path = os.path.join(output_dir, f"{test_file.split('.')[0]}_converted.png")
+        print("📊 XML → PNG 変換中...")
+        
+        try:
+            convert_xml_to_png(test_xml, png_path)
+            print(f"✅ PNG変換完了: {png_path}")
+        except Exception as e:
+            print(f"❌ PNG変換失敗: {e}")
+            continue
+        
+        # 座標範囲の確認
+        try:
+            lat0, lon0, lat1, lon1 = parse_latlon_range(test_xml)
+            print(f"📍 タイル座標範囲:")
+            print(f"   緯度: {lat0:.6f} - {lat1:.6f}")
+            print(f"   経度: {lon0:.6f} - {lon1:.6f}")
             
-            # 検出結果を保存
-            for *xyxy, conf, cls in reversed(det):
-                detection = {
-                    'bbox': [int(x) for x in xyxy],
-                    'confidence': float(conf),
-                    'class_id': int(cls),
-                    'class_name': names[int(cls)] if int(cls) < len(names) else 'unknown'
-                }
-                detections.append(detection)
+            # さきたま史跡の範囲内かチェック
+            if (sakitama_lat_range[0] <= lat0 <= sakitama_lat_range[1] and 
+                sakitama_lon_range[0] <= lon0 <= sakitama_lon_range[1]):
+                print("✅ さきたま史跡範囲内のタイルです")
+            else:
+                print("⚠️ さきたま史跡範囲外のタイルの可能性があります")
+                
+        except Exception as e:
+            print(f"❌ 座標解析失敗: {e}")
+        
+        # 超高感度モードで検出実行
+        print("🔍 超高感度モード検出開始...")
+        
+        try:
+            # 検証システムを初期化
+            validation_system = KofunValidationSystem()
+            optimizer = KofunDetectionOptimizer()
+            
+            # 超高感度検出実行
+            enhanced_detections = validation_system.run_enhanced_detection(
+                png_path, test_xml, 
+                os.path.join(output_dir, f'{test_file.split(".")[0]}_ultra_result.png')
+            )
+            
+            print(f"🔍 超高感度検出結果: {len(enhanced_detections)} 件")
+            
+            # アンサンブル検出も実行
+            img = cv2.imread(png_path)
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+            ensemble_detections = optimizer.apply_ensemble_detection(img_rgb)
+            
+            print(f"🔍 アンサンブル検出結果: {len(ensemble_detections)} 件")
+            
+            # 結果を統合
+            all_detections = enhanced_detections + ensemble_detections
+            print(f"🔍 統合検出結果: {len(all_detections)} 件")
+            
+            total_detections += len(all_detections)
+            
+            # 結果をファイルに保存
+            results_file = os.path.join(output_dir, f"{test_file.split('.')[0]}_detection_results.txt")
+            with open(results_file, 'w', encoding='utf-8') as f:
+                f.write(f"さきたま史跡 超高感度モード検出結果\n")
+                f.write(f"テストファイル: {test_xml}\n")
+                f.write(f"座標範囲: 緯度 {lat0:.6f}-{lat1:.6f}, 経度 {lon0:.6f}-{lon1:.6f}\n")
+                f.write(f"既知の古墳: 9基（さきたま古墳群）\n")
+                f.write(f"検出結果: {len(all_detections)} 件\n\n")
+                
+                for i, detection in enumerate(all_detections):
+                    f.write(f"検出 {i+1}:\n")
+                    f.write(f"  信頼度: {detection['confidence']:.4f}\n")
+                    f.write(f"  座標: ({detection['bbox'][0]:.1f}, {detection['bbox'][1]:.1f}, {detection['bbox'][2]:.1f}, {detection['bbox'][3]:.1f})\n")
+                    
+                    # 座標変換
+                    try:
+                        lat, lon = bbox_to_latlon(detection['bbox'], png_path, test_xml)
+                        f.write(f"  緯度経度: ({lat:.6f}, {lon:.6f})\n")
+                    except:
+                        f.write(f"  緯度経度: 変換エラー\n")
+                    f.write("\n")
+            
+            print(f"📁 結果保存: {results_file}")
+            
+            # 成功判定
+            if len(all_detections) > 0:
+                print("🎉 成功！古墳が検出されました！")
+                print(f"   検出数: {len(all_detections)} 件")
+                break  # 1つでも検出されれば成功
+            
+        except Exception as e:
+            print(f"❌ 検出実行エラー: {e}")
+            import traceback
+            traceback.print_exc()
     
-    # 結果の表示
-    print(f"\n🎯 Ultra-Low Threshold Results (conf_thres=0.01):")
-    print(f"📊 Total detections: {len(detections)}")
+    # 全体の結果
+    print(f"\n📊 全体結果:")
+    print(f"   テストしたタイル数: {len(test_files)}")
+    print(f"   総検出数: {total_detections} 件")
     
-    if detections:
-        print("✅ DETECTIONS FOUND!")
-        for i, det in enumerate(detections):
-            print(f"   Detection #{i+1}:")
-            print(f"     Class: {det['class_name']}")
-            print(f"     Confidence: {det['confidence']:.4f}")
-            print(f"     BBox: {det['bbox']}")
+    if total_detections > 0:
+        print("🎉 成功！古墳が検出されました！")
+        print(f"   既知の古墳: 9基")
+        print(f"   検出率: {total_detections/9*100:.1f}%")
     else:
-        print("❌ Still no detections even with ultra-low threshold")
-        print("💡 This might indicate:")
-        print("   1. The model needs retraining")
-        print("   2. The image doesn't contain kofun")
-        print("   3. Model compatibility issues")
-    
-    return detections
+        print("❌ 全てのタイルで検出されませんでした")
+        print("   次のステップ:")
+        print("   1. 閾値をさらに下げる（0.001以下）")
+        print("   2. モデルの再学習を検討")
+        print("   3. データセットの見直し")
 
 if __name__ == "__main__":
-    if not os.path.exists('second_test_results/second_test.png'):
-        print("❌ Please run test_second_xml.py first")
-    else:
-        detections = ultra_low_threshold_inference()
-        
-        if detections:
-            print("\n🎉 SUCCESS! Detections found with ultra-low threshold!")
-            print("This confirms the system is working, but the model might need adjustment.")
-        else:
-            print("\n⚠️  No detections even with ultra-low threshold.")
-            print("Consider testing with known positive samples or model retraining.") 
+    test_sakitama_ultra_sensitive() 

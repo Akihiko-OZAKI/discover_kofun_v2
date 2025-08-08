@@ -6,6 +6,7 @@ YOLOv5推論テストスクリプト
 import os
 import sys
 import torch
+import pathlib
 
 def test_yolo_inference():
     """
@@ -17,7 +18,14 @@ def test_yolo_inference():
     print(f"📦 PyTorch version: {torch.__version__}")
     print(f"🔧 CUDA available: {torch.cuda.is_available()}")
     
-    # 2. YOLOv5のインポートテスト
+    # 2. Windows の PosixPath 復元対策（Linux で保存した pt を読み込む場合）
+    if os.name == 'nt':
+        try:
+            pathlib.PosixPath = pathlib.WindowsPath  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    # 3. YOLOv5のインポートテスト
     try:
         sys.path.insert(0, os.path.abspath('yolov5'))
         from yolov5.models.common import DetectMultiBackend
@@ -26,7 +34,7 @@ def test_yolo_inference():
         print(f"❌ YOLOv5 models import failed: {e}")
         return False
     
-    # 3. モデルファイルの確認
+    # 4. モデルファイルの確認
     model_path = 'yolov5/weights/best.pt'
     if os.path.exists(model_path):
         size = os.path.getsize(model_path)
@@ -35,7 +43,7 @@ def test_yolo_inference():
         print(f"❌ Model file not found: {model_path}")
         return False
     
-    # 4. モデルの読み込みテスト
+    # 5. モデルの読み込みテスト
     try:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = DetectMultiBackend(model_path, device=device)

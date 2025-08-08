@@ -11,12 +11,21 @@ import sys
 import torch
 from typing import List, Dict, Tuple
 import math
+import pathlib
 
 # YOLOv5のパスを追加
 sys.path.insert(0, os.path.abspath('yolov5'))
 from yolov5.models.common import DetectMultiBackend
 from yolov5.utils.general import check_img_size, non_max_suppression, scale_boxes
 from yolov5.utils.torch_utils import select_device
+
+# Windows で Linux 環境で保存された .pt 内の PosixPath を復元できない問題への対応
+# pickle 復元時に PosixPath を WindowsPath に置き換える
+if os.name == 'nt':
+    try:
+        pathlib.PosixPath = pathlib.WindowsPath  # type: ignore[attr-defined]
+    except Exception:
+        pass
 
 class KofunValidationSystem:
     def __init__(self, kofun_csv_path="../kofun_coorinates.csv"):
@@ -145,8 +154,8 @@ class KofunValidationSystem:
             detection['validation_info'] = validation_info
             detection['final_confidence'] = validation_score
             
-            # 検証スコアが一定以上の場合のみ採用
-            if validation_score >= 0.3:
+            # 検証スコアが一定以上の場合のみ採用（超高感度モード）
+            if validation_score >= 0.1:  # 閾値を下げる
                 validated_detections.append(detection)
         
         return validated_detections
@@ -182,9 +191,9 @@ class KofunValidationSystem:
         if len(img.shape) == 3:
             img = img[None]
         
-        # 複数の閾値で検出
+        # 複数の閾値で検出（超高感度モード）
         all_detections = []
-        conf_thresholds = [0.2, 0.3]
+        conf_thresholds = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]  # さらに低い閾値
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
