@@ -3,6 +3,7 @@ services:
     name: discover-kofun-v2
     env: python
     buildCommand: |
+      python --version
       pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
       python -c "import torch; print('PyTorch version:', torch.__version__)"
@@ -12,6 +13,8 @@ services:
         value: 3.11.0
       - key: FLASK_ENV
         value: production
+      - key: PYTHONPATH
+        value: /opt/render/project/src
     healthCheckPath: /
     autoDeploy: true
     disk:
