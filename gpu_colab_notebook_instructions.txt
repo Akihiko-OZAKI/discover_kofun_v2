@@ -1,0 +1,183 @@
+# 🗿 古墳検出システム - Google Colab GPU学習版
+
+このノートブックでは、GPUを使用して高速で古墳検出モデルを学習します。
+
+## 重要: GPU設定
+1. メニュー → ランタイム → ランタイムの種類を変更
+2. ハードウェアアクセラレータ → **GPU** を選択
+3. 保存して再起動
+
+## セル1: GPU確認とライブラリインストール
+
+```python
+# GPU確認
+import torch
+print(f"GPU利用可能: {torch.cuda.is_available()}")
+print(f"GPU数: {torch.cuda.device_count()}")
+if torch.cuda.is_available():
+    print(f"現在のGPU: {torch.cuda.get_device_name(0)}")
+    print(f"GPUメモリ: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+else:
+    print("⚠️ GPUが利用できません。CPUで学習します（非常に遅くなります）")
+
+# 必要なライブラリのインストール
+!pip install torch torchvision
+!pip install opencv-python
+!pip install matplotlib
+!pip install tqdm
+!pip install PyYAML
+
+# YOLOv5のクローン
+!git clone https://github.com/ultralytics/yolov5
+%cd yolov5
+!pip install -r requirements.txt
+```
+
+## セル2: データセットのアップロード
+
+```python
+# データセットのアップロード
+from google.colab import files
+import zipfile
+import os
+
+print("データセットのZIPファイルをアップロードしてください...")
+uploaded = files.upload()
+
+# アップロードされたファイルを展開
+for filename in uploaded.keys():
+    if filename.endswith('.zip'):
+        with zipfile.ZipFile(filename, 'r') as zip_ref:
+            zip_ref.extractall('./dataset')
+        print(f"データセットを展開しました: {filename}")
+```
+
+## セル3: データセットの確認
+
+```python
+# データセットの確認
+import os
+
+dataset_dir = './dataset'
+images_dir = os.path.join(dataset_dir, 'images')
+labels_dir = os.path.join(dataset_dir, 'labels')
+
+print(f"画像ファイル数: {len(os.listdir(images_dir))}")
+print(f"ラベルファイル数: {len(os.listdir(labels_dir))}")
+
+# サンプル画像を表示
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+sample_image = os.path.join(images_dir, os.listdir(images_dir)[0])
+img = mpimg.imread(sample_image)
+plt.figure(figsize=(10, 8))
+plt.imshow(img)
+plt.title('サンプル画像')
+plt.axis('off')
+plt.show()
+```
+
+## セル4: GPU対応モデル学習の実行
+
+```python
+# GPU対応モデル学習の実行
+import torch
+
+# GPU設定確認
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"使用デバイス: {device}")
+
+# 学習実行（GPU対応）
+!python train.py --img 640 --batch 16 --epochs 50 --data ../dataset/kofun_dataset.yaml --weights yolov5s.pt --cache --device {device}
+
+print("🎉 学習完了！")
+```
+
+## セル5: 学習結果の確認
+
+```python
+# 学習結果の確認
+import matplotlib.pyplot as plt
+from PIL import Image
+
+print("📈 学習結果を確認中...")
+try:
+    # 学習曲線の表示
+    results = Image.open('runs/train/exp/results.png')
+    plt.figure(figsize=(12, 8))
+    plt.imshow(results)
+    plt.axis('off')
+    plt.title('Training Results (GPU)')
+    plt.show()
+    
+    # 学習統計
+    print("📊 学習統計:")
+    print("- 使用デバイス: GPU" if torch.cuda.is_available() else "- 使用デバイス: CPU")
+    print("- エポック数: 50")
+    print("- バッチサイズ: 16")
+    print("- 画像サイズ: 640x640")
+    
+except Exception as e:
+    print(f"学習結果の表示に失敗しました: {e}")
+```
+
+## セル6: 学習済みモデルのダウンロード
+
+```python
+# 学習済みモデルのダウンロード
+from google.colab import files
+
+print("💾 学習済みモデルをダウンロード中...")
+try:
+    files.download('runs/train/exp/weights/best.pt')
+    files.download('runs/train/exp/weights/last.pt')
+    print("✅ モデルファイルのダウンロード完了")
+    print("📁 ダウンロードされたファイル:")
+    print("  - best.pt (最良モデル)")
+    print("  - last.pt (最終モデル)")
+except Exception as e:
+    print(f"❌ モデルファイルのダウンロードに失敗しました: {e}")
+
+print("🎉 GPU学習完了！")
+```
+
+## セル7: 学習時間の確認
+
+```python
+# 学習時間の確認
+import os
+import time
+
+# 学習ログから時間を確認
+log_file = 'runs/train/exp/results.csv'
+if os.path.exists(log_file):
+    print("📊 学習時間の確認:")
+    with open(log_file, 'r') as f:
+        lines = f.readlines()
+        if len(lines) > 1:
+            last_line = lines[-1].strip().split(',')
+            if len(last_line) > 1:
+                print(f"- 総学習時間: {last_line[1]} 秒")
+                print(f"- 1エポックあたり: {float(last_line[1])/50:.1f} 秒")
+
+print("🚀 GPU学習の利点:")
+print("- 高速学習: CPUの10-50倍高速")
+print("- 効率的: 短時間で高精度モデル")
+print("- 実用的: 実際のプロジェクトで使用可能")
+```
+
+## 使用方法
+
+1. **GPU設定**: ランタイム → ランタイムの種類を変更 → GPU
+2. Google Colabで新しいノートブックを作成
+3. 上記のセルを順番にコピー&ペースト
+4. データセットファイル `kofun_dataset_for_colab.zip` をアップロード
+5. 各セルを実行
+
+## 期待される結果
+
+- **GPU使用時**: 数分で50エポック完了
+- **CPU使用時**: 数時間かかる可能性
+- **学習精度**: 地形データでの基本動作確認
+- **モデル**: 実際に使用可能な学習済みモデル

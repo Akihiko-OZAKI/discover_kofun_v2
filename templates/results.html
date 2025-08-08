@@ -1,0 +1,246 @@
+<!doctype html>
+<html>
+<head>
+    <title>古墳検出結果 - 最適化版</title>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .results-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .image-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .image-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        .result-image {
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .stats-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        .detection-list {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .detection-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .detection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .confidence-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .confidence-high { background: #28a745; color: white; }
+        .confidence-medium { background: #ffc107; color: black; }
+        .confidence-low { background: #dc3545; color: white; }
+        .coordinates {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .optimization-badge {
+            display: inline-block;
+            background: #17a2b8;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            margin-left: 10px;
+        }
+        .back-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .no-detections {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏛️ 古墳検出結果 - V2最適化版</h1>
+        <p>アンサンブル検出と検証システムによる高精度な古墳検出</p>
+    </div>
+
+    {% if optimization_info %}
+    <div class="stats-section">
+        <h3>📊 検出統計</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div class="stat-card">
+                <div class="stat-number">{{ optimization_info.total_detections }}</div>
+                <div class="stat-label">総検出数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ optimization_info.ensemble_detections }}</div>
+                <div class="stat-label">アンサンブル検出</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ optimization_info.validation_enhanced }}</div>
+                <div class="stat-label">検証強化</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="results-container">
+        <div class="image-section">
+            <h3>🔍 検出結果画像</h3>
+            {% if image_path %}
+            <img src="{{ url_for('static', filename=image_path) }}" alt="検出結果" class="result-image">
+            {% else %}
+            <div class="no-detections">検出結果画像がありません</div>
+            {% endif %}
+        </div>
+
+        <div class="image-section">
+            <h3>🎯 強化検証結果</h3>
+            {% if enhanced_image_path %}
+            <img src="{{ url_for('static', filename=enhanced_image_path) }}" alt="強化検証結果" class="result-image">
+            {% else %}
+            <div class="no-detections">強化検証結果画像がありません</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if results and results.detections %}
+    <div class="detection-list">
+        <h3>📍 検出詳細</h3>
+        {% for detection in results.detections %}
+        <div class="detection-item">
+            <div class="detection-header">
+                <h4>検出 #{{ loop.index }}</h4>
+                {% if detection.confidence >= 0.7 %}
+                    <span class="confidence-badge confidence-high">高信頼度 ({{ "%.1f"|format(detection.confidence * 100) }}%)</span>
+                {% elif detection.confidence >= 0.4 %}
+                    <span class="confidence-badge confidence-medium">中信頼度 ({{ "%.1f"|format(detection.confidence * 100) }}%)</span>
+                {% else %}
+                    <span class="confidence-badge confidence-low">低信頼度 ({{ "%.1f"|format(detection.confidence * 100) }}%)</span>
+                {% endif %}
+            </div>
+            
+            <div style="margin-bottom: 10px;">
+                <strong>座標:</strong>
+                <div class="coordinates">
+                    緯度: {{ "%.6f"|format(detection.latitude) }}, 経度: {{ "%.6f"|format(detection.longitude) }}
+                </div>
+            </div>
+
+            {% if detection.optimization_info %}
+            <div style="margin-bottom: 10px;">
+                <strong>最適化情報:</strong><br>
+                {% if detection.optimization_info.ensemble_boosted %}
+                    <span class="optimization-badge">アンサンブル検出</span>
+                {% endif %}
+                {% if detection.optimization_info.validation_score %}
+                    <span class="optimization-badge">検証スコア: {{ "%.2f"|format(detection.optimization_info.validation_score) }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if detection.validation_info %}
+            <div>
+                <strong>検証情報:</strong>
+                <ul style="margin: 5px 0; padding-left: 20px;">
+                    {% for key, value in detection.validation_info.items() %}
+                    <li>{{ key }}: {{ value }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="detection-list">
+        <div class="no-detections">
+            <h3>🔍 検出結果</h3>
+            <p>この地域では古墳が検出されませんでした。</p>
+            <p>異なる地域のデータで試してみてください。</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="text-align: center;">
+        <a href="{{ url_for('index') }}" class="back-button">← 新しいファイルをアップロード</a>
+    </div>
+</body>
+</html>

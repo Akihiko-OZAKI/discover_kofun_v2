@@ -1,19 +1,104 @@
-# 古墳再発見 Webアプリ
+# 古墳再発見AI V2 🏛️
 
-国土地理院のGMLデータを元に、標高画像を生成 → YOLOv5で古墳の候補地形を検出する Flask Webアプリです。
+国土地理院の標高データを使用して、古墳の可能性がある地形を自動検出するAIシステムです。YOLOv5を使用した物体検出と、独自の検証システムを組み合わせることで、高精度な古墳検出を実現しています。
 
-## 🔍 機能
-- GML (DEM5A) → 標高画像（PNG）自動生成
-- YOLOv5 による推論
-- 検出結果を赤枠＋緯度経度付きで表示
-- Webアプリ経由で結果を可視化
+## 🆕 V2の新機能
 
-## 🧪 ローカル起動方法
+- **アンサンブル検出**: 複数のモデルサイズでの検出結果を統合
+- **精度最適化**: 推論パラメータの自動最適化
+- **検証システム強化**: 古墳座標データとの照合機能
+- **美しいUI**: モダンな結果表示インターフェース
+- **統計情報**: 検出精度と最適化情報の詳細表示
 
+## 特徴 ✨
+
+- 国土地理院の標高データ（DEM）から古墳を自動検出
+- YOLOv5ベースの深層学習モデルを使用
+- 独自の検証システムによる検出精度の向上
+- アンサンブル検出による精度向上
+- 使いやすいWebインターフェース
+- 検出結果の位置情報（緯度・経度）を提供
+- 信頼度スコアによる検出結果の評価
+
+## セットアップ 🚀
+
+### 必要条件
+
+- Python 3.8以上
+- GDAL 3.8.4
+- その他の依存関係は`requirements.txt`に記載
+
+### インストール手順
+
+1. リポジトリのクローン:
 ```bash
-git clone https://github.com/Akihiko-OZAKI/discover_kofun_v1.git
-cd discover_kofun_v1
-python -m venv .venv
-.venv\Scripts\activate   # Mac/Linux: source .venv/bin/activate
+git clone https://github.com/yourusername/discover_kofun_v2.git
+cd discover_kofun_v2
+```
+
+2. 仮想環境の作成と有効化:
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+3. 依存関係のインストール:
+```bash
 pip install -r requirements.txt
+```
+
+4. アプリケーションの起動:
+```bash
 python app.py
+```
+
+## 使用方法 📝
+
+1. ブラウザで http://localhost:5000 にアクセス
+2. 国土地理院サイトからダウンロードしたXMLファイルを選択
+3. 「推論実行」ボタンをクリック
+4. 最適化された検出結果が表示されます
+
+### 検出結果の見方
+
+- 🔴 高信頼度: 古墳である可能性が高い
+- 🟡 中信頼度: 古墳の可能性がある
+- 🟢 低信頼度: 古墳に似た地形
+
+### 最適化情報
+
+- **アンサンブル検出**: 複数サイズでの検出結果
+- **検証強化**: 古墳座標データとの照合
+- **統計情報**: 検出精度の詳細分析
+
+## 技術詳細 🔧
+
+- **モデル**: YOLOv5（PyTorch）
+- **最適化**: アンサンブル検出、パラメータ自動調整
+- **検証システム**: 古墳座標データとの照合
+- **データ処理**: GDAL, rasterio
+- **Webフレームワーク**: Flask
+- **フロントエンド**: HTML/CSS/JavaScript
+
+## デプロイ 🌐
+
+### Renderでのデプロイ
+
+1. GitHubリポジトリをRenderに接続
+2. `render.yaml`の設定を使用
+3. 自動デプロイが有効
+
+### 環境変数
+
+- `FLASK_ENV`: production
+- `PYTHON_VERSION`: 3.8.12
+
+## ライセンス 📄
+
+このプロジェクトはMITライセンスの下で公開されています。
+
+## 謝辞 🙏
+
+- [国土地理院](https://www.gsi.go.jp/)：標高データの提供
+- [Ultralytics](https://github.com/ultralytics/yolov5)：YOLOv5の実装

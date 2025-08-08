@@ -1,27 +1,271 @@
-<!-- templates/index.html -->
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>古墳検出アプリ</title>
+  <meta charset="UTF-8">
+  <title>古墳再発見アプリ</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .instructions {
+      background: #e8f4fd;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      border-left: 4px solid #3498db;
+    }
+    .upload-form {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .file-input {
+      margin: 20px 0;
+    }
+    .submit-btn {
+      background: #3498db;
+      color: white;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+    }
+    .submit-btn:hover {
+      background: #2980b9;
+    }
+    .result-section {
+      margin-top: 30px;
+    }
+    .result-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    .detection-info {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    .detection-item {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 4px solid #27ae60;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    .detection-item:hover {
+      transform: translateX(5px);
+    }
+    .confidence-high {
+      border-left-color: #e74c3c;
+      background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+    }
+    .confidence-medium {
+      border-left-color: #f39c12;
+      background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+    }
+    .confidence-low {
+      border-left-color: #f1c40f;
+      background: linear-gradient(135deg, #fffde7 0%, #ffffff 100%);
+    }
+    .no-detection {
+      background: #fff3cd;
+      padding: 15px;
+      border-radius: 5px;
+      border-left: 4px solid #ffc107;
+      text-align: center;
+    }
+    .coordinates {
+      font-family: monospace;
+      background: #f1f2f6;
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+    .error {
+      color: #e74c3c;
+      background: #fdf2f2;
+      padding: 15px;
+      border-radius: 5px;
+      border-left: 4px solid #e74c3c;
+    }
+    .loading {
+      color: #3498db;
+      font-weight: bold;
+      text-align: center;
+      padding: 20px;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 15px;
+      background: #ecf0f1;
+      border-radius: 8px;
+      min-width: 120px;
+      margin: 5px;
+    }
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .stat-label {
+      color: #7f8c8d;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
-    <h1>古墳再発見（YOLOv5）</h1>
+  <div class="container">
+    <h2>🏛️ 古墳再発見アプリ（YOLOv5）</h2>
+    
+    <div class="instructions">
+      <strong>使い方：</strong><br><br>
+      １．国土地理院サイトからXMLファイルをダウンロードします<br>
+      ２．「xmlファイルを選択してアップロード」ボタンでXMLファイルを選択します<br>
+      ３．「推論実行」ボタンをクリックします<br>
+      ４．古墳の可能性がある箇所が画像上に表示されます
+    </div>
 
-    <form method="POST">
-        <button type="submit">推論実行（dem_image.png）</button>
+    <form method="post" enctype="multipart/form-data" action="/upload" onsubmit="return onSubmitForm();" class="upload-form">
+      <label for="xmlFile">xmlファイルを選択してアップロード</label><br>
+      <input type="file" name="file" id="xmlFile" accept=".xml" required class="file-input"><br>
+      <button type="submit" class="submit-btn">推論実行</button>
     </form>
 
-    {% if result %}
-        <h2>結果：</h2>
-        <img src="{{ image_path }}" alt="推論結果画像" width="600">
-        <h3>検出数: {{ detections|length }}</h3>
-        <ul>
-            {% for det in detections %}
-                <li>座標: {{ det[:4] }}, 確信度: {{ det[4]|round(2) }}</li>
-            {% endfor %}
-        </ul>
+    <div id="loading-message" style="display:none;" class="loading">
+      🔍 推論中です…少々お待ちください。
+    </div>
+
+    {% if result_path %}
+      <div class="result-section">
+        <h3>推論結果画像</h3>
+        <img src="{{ result_path }}" alt="推論結果" class="result-image">
+        
+        {% if result_info %}
+          <div class="detection-info">
+            <h4>検出結果</h4>
+            
+            {% if result_info.has_kofun %}
+              <div class="stats">
+                <div class="stat-item">
+                  <div class="stat-number">{{ result_info.total_detections }}</div>
+                  <div class="stat-label">検出数</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-number">✅</div>
+                  <div class="stat-label">古墳あり</div>
+                </div>
+              </div>
+              
+              {% for detection in result_info.detections %}
+                {% set confidence = detection.confidence if detection.confidence else 0 %}
+                {% if confidence >= 0.3 %}
+                  {% set confidence_class = "confidence-high" %}
+                {% elif confidence >= 0.2 %}
+                  {% set confidence_class = "confidence-medium" %}
+                {% else %}
+                  {% set confidence_class = "confidence-low" %}
+                {% endif %}
+                
+                <div class="detection-item {{ confidence_class }}">
+                  <strong>🔍 検出 #{{ detection.detection_id }}</strong>
+                  <span style="float: right; font-size: 12px; color: #666;">
+                                         {% if confidence >= 0.3 %}
+                       🔴 高信頼度
+                     {% elif confidence >= 0.2 %}
+                       🟡 中信頼度
+                     {% else %}
+                       🟢 低信頼度
+                     {% endif %}
+                  </span><br>
+                  <div class="coordinates">
+                    📍 緯度: {{ "%.6f"|format(detection.latitude) }}<br>
+                    📍 経度: {{ "%.6f"|format(detection.longitude) }}<br>
+                    🎯 信頼度: {{ "%.3f"|format(confidence) }}
+                  </div>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="no-detection">
+                <strong>🔍 検出結果</strong><br>
+                この地域からは古墳の候補地形が検出されませんでした。
+              </div>
+            {% endif %}
+            
+            <!-- デバッグ情報セクション -->
+            <details style="margin-top: 20px;">
+              <summary style="cursor: pointer; color: #666; font-weight: bold;">🔧 デバッグ情報（開発者用）</summary>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; font-family: monospace; font-size: 12px;">
+                <strong>座標範囲:</strong><br>
+                緯度: {{ result_info.debug_info.lat_range if result_info.debug_info.lat_range else "N/A" }}<br>
+                経度: {{ result_info.debug_info.lon_range if result_info.debug_info.lon_range else "N/A" }}<br><br>
+                
+                <strong>検出ファイル:</strong><br>
+                {{ result_info.debug_info.found_txt_files if result_info.debug_info.found_txt_files else "なし" }}<br><br>
+                
+                {% if result_info.debug_info.raw_detections %}
+                  <strong>生検出データ:</strong><br>
+                  {% for detection in result_info.debug_info.raw_detections %}
+                    {{ detection }}<br>
+                  {% endfor %}
+                {% endif %}
+                
+                {% if result_info.debug_info.error %}
+                  <strong style="color: red;">エラー:</strong><br>
+                  {{ result_info.debug_info.error }}
+                {% endif %}
+              </div>
+            </details>
+          </div>
+        {% endif %}
+      </div>
     {% endif %}
+
+    {% if error %}
+      <div class="error">
+        <strong>エラー:</strong> {{ error | safe }}
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    document.getElementById('xmlFile').addEventListener('change', function() {
+      var img = document.querySelector('.result-image');
+      var resultSection = document.querySelector('.result-section');
+      if (img) img.style.display = 'none';
+      if (resultSection) resultSection.style.display = 'none';
+    });
+
+    function onSubmitForm() {
+      document.getElementById('loading-message').style.display = 'block';
+      return true;
+    }
+  </script>
 </body>
 </html>
