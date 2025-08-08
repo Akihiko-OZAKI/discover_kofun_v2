@@ -3,11 +3,11 @@ services:
     name: discover-kofun-v2
     env: python
     buildCommand: |
-      python --version
-      pip install --upgrade pip setuptools wheel
-      pip install -r requirements.txt
-      python -c "import torch; print('PyTorch version:', torch.__version__)"
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+      python3.11 --version
+      python3.11 -m pip install --upgrade pip setuptools wheel
+      python3.11 -m pip install -r requirements.txt
+      python3.11 -c "import torch; print('PyTorch version:', torch.__version__)"
+    startCommand: python3.11 -m gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
