@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, redirect, jsonify
 from werkzeug.utils import secure_filename
 import cv2
 import numpy as np
+import torch
 import json
 
 from xml_to_png import convert_xml_to_png
@@ -28,6 +29,19 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Reduce thread usage to save memory/CPU on Render
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
+try:
+    cv2.setNumThreads(1)
+except Exception:
+    pass
+try:
+    torch.set_num_threads(1)
+except Exception:
+    pass
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
