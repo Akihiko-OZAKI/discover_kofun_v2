@@ -19,7 +19,7 @@ from yolov5.utils.general import check_img_size, non_max_suppression, scale_boxe
 from yolov5.utils.torch_utils import select_device
 
 class KofunDetectionOptimizer:
-    def __init__(self, weights_path='yolov5/weights/best.pt'):
+    def __init__(self, weights_path='weights/best.pt'):
         self.weights_path = weights_path
         self.device = select_device('')
         self.model = None
@@ -32,7 +32,7 @@ class KofunDetectionOptimizer:
         # モデル読み込み
         self.model = DetectMultiBackend(self.weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((640, 640), s=self.stride)
+        self.imgsz = check_img_size((512, 512), s=self.stride)
         
         # モデルを評価モードに設定
         self.model.eval()

@@ -28,7 +28,7 @@ if os.name == 'nt':
         pass
 
 class KofunValidationSystem:
-    def __init__(self, kofun_csv_path="../kofun_coorinates.csv"):
+    def __init__(self, kofun_csv_path="kofun_coordinates_updated.csv"):
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
         self.device = select_device('')
         self.model = None
@@ -43,13 +43,13 @@ class KofunValidationSystem:
             print(f"❌ 古墳座標データ読み込みエラー: {e}")
             return pd.DataFrame()
     
-    def load_model(self, weights_path='yolov5/weights/best.pt'):
+    def load_model(self, weights_path='weights/best.pt'):
         """YOLOv5モデルを読み込み"""
         print("🔄 Loading YOLOv5 model...")
         
         self.model = DetectMultiBackend(weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((768, 768), s=self.stride)
+        self.imgsz = check_img_size((512, 512), s=self.stride)
         # CUDA 環境では半精度を使用（CPU の場合は自動で無効）
         self.half = self.device.type != 'cpu'
         
@@ -191,20 +191,15 @@ class KofunValidationSystem:
         if len(img.shape) == 3:
             img = img[None]
         
-        # 複数の閾値で検出（超高感度モード）
+        # 検出（Renderのタイムアウト回避のため軽量化）
         all_detections = []
-        conf_thresholds = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]  # さらに低い閾値
+        conf_thresholds = [0.15]
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
-            # 通常推論
+            # 通常推論（TTA無効化で高速化）
             pred = self.model(img, augment=False, visualize=False)
-            pred = non_max_suppression(pred, conf_thres, 0.50, classes=None, max_det=50)
-
-            # 水平フリップTTA
-            img_flip = torch.flip(img.clone(), dims=[3])
-            pred_flip = self.model(img_flip, augment=False, visualize=False)
-            pred_flip = non_max_suppression(pred_flip, conf_thres, 0.50, classes=None, max_det=50)
+            pred = non_max_suppression(pred, conf_thres, 0.55, classes=None, max_det=30)
             
             # 通常推論の取り込み
             for i, det in enumerate(pred):
@@ -215,29 +210,6 @@ class KofunValidationSystem:
                         x_center = (x1 + x2) / 2 / W
                         y_center = (y1 + y2) / 2 / H
                         width = (x2 - x1) / W
-                        height = (y2 - y1) / H
-                        all_detections.append({
-                            'x_center': x_center,
-                            'y_center': y_center,
-                            'width': width,
-                            'height': height,
-                            'confidence': conf.item(),
-                            'class': cls.item(),
-                            'threshold': conf_thres
-                        })
-
-            # フリップ推論の取り込み（元画像座標へ戻す）
-            for i, det in enumerate(pred_flip):
-                if len(det):
-                    det[:, :4] = scale_boxes(img_flip[i].shape[1:], det[:, :4], image.shape).round()
-                    for *xyxy, conf, cls in det:
-                        x1, y1, x2, y2 = xyxy
-                        # 左右反転を元に戻す
-                        x1_new = W - x2
-                        x2_new = W - x1
-                        x_center = (x1_new + x2_new) / 2 / W
-                        y_center = (y1 + y2) / 2 / H
-                        width = (x2_new - x1_new) / W
                         height = (y2 - y1) / H
                         all_detections.append({
                             'x_center': x_center,

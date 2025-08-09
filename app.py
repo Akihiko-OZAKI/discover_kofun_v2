@@ -12,7 +12,6 @@ from xml_to_png import convert_xml_to_png
 from my_utils import parse_latlon_range, bbox_to_latlon, read_yolo_labels
 from enhanced_marking import draw_enhanced_detections, create_matplotlib_visualization
 from kofun_validation_system import KofunValidationSystem
-from model_optimization import KofunDetectionOptimizer
 
 app = Flask(__name__)
 
@@ -49,6 +48,12 @@ def index():
         return redirect('/upload')
     return render_template('index.html')
 
+_global_validation_system = None
+
+@app.route('/upload', methods=['GET'])
+def upload_get_redirect():
+    return redirect('/')
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     # 古いPNG/JPGファイル削除
@@ -77,32 +82,20 @@ def upload_file():
             png_path = os.path.join(app.config['RESULT_FOLDER'], 'converted.png')
             convert_xml_to_png(xml_path, png_path)
 
-            # 最適化された検出システムを初期化
+            # 最適化された検出システム（グローバルに一度だけ初期化）
             print("🚀 Running optimized detection with enhanced validation...")
-            validation_system = KofunValidationSystem()
-            optimizer = KofunDetectionOptimizer()
+            global _global_validation_system
+            if _global_validation_system is None:
+                _global_validation_system = KofunValidationSystem()
             
             # 最適化された検出を実行
-            enhanced_detections = validation_system.run_enhanced_detection(
+            enhanced_detections = _global_validation_system.run_enhanced_detection(
                 png_path, xml_path, 
                 os.path.join(app.config['RESULT_FOLDER'], 'enhanced_result.png')
             )
             
-            # アンサンブル検出による精度向上
-            if enhanced_detections:
-                # 画像を読み込んでアンサンブル検出を実行
-                img = cv2.imread(png_path)
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                
-                ensemble_detections = optimizer.apply_ensemble_detection(img_rgb)
-                
-                # 既存の検出結果とアンサンブル結果を統合
-                all_detections = enhanced_detections + ensemble_detections
-                
-                # 重複検出を統合
-                final_detections = optimizer.merge_ensemble_detections(all_detections)
-            else:
-                final_detections = enhanced_detections
+            # 軽量化のためアンサンブルは無効化
+            final_detections = enhanced_detections
             
             # 検出結果を処理
             detections = []
