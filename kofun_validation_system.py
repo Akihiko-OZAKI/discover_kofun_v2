@@ -193,13 +193,13 @@ class KofunValidationSystem:
         
         # 検出（Renderのタイムアウト回避のため軽量化）
         all_detections = []
-        conf_thresholds = [0.15]
+        conf_thresholds = [0.2]  # 単一の閾値のみ
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
             # 通常推論（TTA無効化で高速化）
             pred = self.model(img, augment=False, visualize=False)
-            pred = non_max_suppression(pred, conf_thres, 0.55, classes=None, max_det=30)
+            pred = non_max_suppression(pred, conf_thres, 0.55, classes=None, max_det=20)  # 検出数削減
             
             # 通常推論の取り込み
             for i, det in enumerate(pred):
@@ -224,10 +224,17 @@ class KofunValidationSystem:
         # 重複検出の統合
         merged_detections = self.merge_overlapping_detections(all_detections)
         
-        # 古墳座標データで検証・補正
-        validated_detections = self.validate_detection_with_kofun_data(
-            merged_detections, image_bounds
-        )
+        # 古墳座標データで検証・補正（軽量化版）
+        validated_detections = []
+        for detection in merged_detections:
+            # 簡易検証：信頼度が一定以上の場合のみ採用
+            if detection['confidence'] >= 0.1:  # 閾値を下げる
+                detection['final_confidence'] = detection['confidence']
+                detection['validation_info'] = {
+                    'original_confidence': detection['confidence'],
+                    'validation_score': detection['confidence']
+                }
+                validated_detections.append(detection)
         
         print(f"✅ Enhanced detection completed: {len(validated_detections)} validated detections")
         

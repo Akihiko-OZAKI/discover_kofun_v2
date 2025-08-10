@@ -108,7 +108,7 @@ def upload_file():
                 os.path.join(app.config['RESULT_FOLDER'], 'enhanced_result.png')
             )
             
-            # 軽量化のためアンサンブルは無効化
+            # 軽量化のためアンサンブルは無効化、直接使用
             final_detections = enhanced_detections
             
             # 検出結果を処理
