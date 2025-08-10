@@ -27,7 +27,7 @@ if os.name == 'nt':
 class KofunValidationSystem:
     def __init__(self, kofun_csv_path="kofun_coordinates_updated.csv"):
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
-        self.device = select_device('')
+        # Remove device selection - ultralytics handles this automatically
         self.model = None
         
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:

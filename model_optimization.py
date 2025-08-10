@@ -18,7 +18,7 @@ from ultralytics import YOLO
 class KofunDetectionOptimizer:
     def __init__(self, weights_path='weights/best.pt'):
         self.weights_path = weights_path
-        self.device = select_device('')
+        # Remove device selection - ultralytics handles this automatically
         self.model = None
         self.load_model()
         
