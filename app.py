@@ -1,7 +1,6 @@
 import sys
 import os
-# Remove yolov5 path insertion since we're using ultralytics
-# sys.path.insert(0, os.path.abspath('yolov5'))  # これでyolov5がパスに入る
+sys.path.insert(0, os.path.abspath('yolov5'))  # これでyolov5がパスに入る
 
 from flask import Flask, render_template, request, redirect, jsonify
 from werkzeug.utils import secure_filename

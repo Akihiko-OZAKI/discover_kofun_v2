@@ -12,13 +12,16 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
 
-# Replace yolov5 with ultralytics
-from ultralytics import YOLO
+# YOLOv5のパスを追加
+sys.path.insert(0, os.path.abspath('yolov5'))
+from yolov5.models.common import DetectMultiBackend
+from yolov5.utils.general import check_img_size, non_max_suppression, scale_boxes
+from yolov5.utils.torch_utils import select_device
 
 class KofunDetectionOptimizer:
     def __init__(self, weights_path='weights/best.pt'):
         self.weights_path = weights_path
-        # Remove device selection - ultralytics handles this automatically
+        self.device = select_device('')
         self.model = None
         self.load_model()
         
@@ -26,8 +29,16 @@ class KofunDetectionOptimizer:
         """モデルの読み込みと最適化"""
         print("🔄 Loading and optimizing model...")
         
-        # モデル読み込み（ultralytics YOLO）
-        self.model = YOLO(self.weights_path)
+        # モデル読み込み
+        self.model = DetectMultiBackend(self.weights_path, device=self.device)
+        self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
+        self.imgsz = check_img_size((512, 512), s=self.stride)
+        
+        # モデルを評価モードに設定
+        self.model.eval()
+        
+        # ウォームアップ
+        self.model.warmup(imgsz=(1 if self.pt else 1, 3, *self.imgsz))
         
         print("✅ Model loaded successfully")
     
@@ -75,26 +86,28 @@ class KofunDetectionOptimizer:
     def run_inference(self, img: np.ndarray, conf_threshold: float = 0.3, 
                      iou_threshold: float = 0.5) -> List[Dict]:
         """推論実行"""
-        # 推論（ultralytics YOLO）
-        results = self.model(img, conf=conf_threshold, iou=iou_threshold)
+        # 画像の前処理
+        img_resized = cv2.resize(img, self.imgsz)
+        img_tensor = torch.from_numpy(img_resized).permute(2, 0, 1).float() / 255.0
+        img_tensor = img_tensor.unsqueeze(0).to(self.device)
+        
+        # 推論
+        with torch.no_grad():
+            pred = self.model(img_tensor)
+            pred = non_max_suppression(pred, conf_threshold, iou_threshold)
         
         detections = []
-        for result in results:
-            if result.boxes is not None:
-                boxes = result.boxes
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf = box.conf[0].cpu().numpy()
-                    cls = box.cls[0].cpu().numpy()
-                    
-                    detections.append({
-                        'x_center': (x1 + x2) / 2,
-                        'y_center': (y1 + y2) / 2,
-                        'width': x2 - x1,
-                        'height': y2 - y1,
-                        'confidence': conf,
-                        'class': int(cls)
-                    })
+        if pred[0] is not None:
+            for det in pred[0]:
+                x1, y1, x2, y2, conf, cls = det.cpu().numpy()
+                detections.append({
+                    'x_center': (x1 + x2) / 2,
+                    'y_center': (y1 + y2) / 2,
+                    'width': x2 - x1,
+                    'height': y2 - y1,
+                    'confidence': conf,
+                    'class': int(cls)
+                })
         
         return detections
     
@@ -109,30 +122,29 @@ class KofunDetectionOptimizer:
         for size in model_sizes[:num_models]:
             # 画像をリサイズ
             img_resized = cv2.resize(img, size)
+            img_tensor = torch.from_numpy(img_resized).permute(2, 0, 1).float() / 255.0
+            img_tensor = img_tensor.unsqueeze(0).to(self.device)
             
-            # 推論（ultralytics YOLO）
-            results = self.model(img_resized, conf=0.25, iou=0.45)
+            # 推論
+            with torch.no_grad():
+                pred = self.model(img_tensor)
+                pred = non_max_suppression(pred, 0.25, 0.45)
             
-            for result in results:
-                if result.boxes is not None:
-                    boxes = result.boxes
-                    for box in boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = box.conf[0].cpu().numpy()
-                        cls = box.cls[0].cpu().numpy()
-                        
-                        # 元の画像サイズにスケールバック
-                        scale_x = img.shape[1] / size[0]
-                        scale_y = img.shape[0] / size[1]
-                        
-                        all_detections.append({
-                            'x_center': (x1 + x2) / 2 * scale_x,
-                            'y_center': (y1 + y2) / 2 * scale_y,
-                            'width': (x2 - x1) * scale_x,
-                            'height': (y2 - y1) * scale_y,
-                            'confidence': conf,
-                            'class': int(cls)
-                        })
+            if pred[0] is not None:
+                for det in pred[0]:
+                    x1, y1, x2, y2, conf, cls = det.cpu().numpy()
+                    # 元の画像サイズにスケールバック
+                    scale_x = img.shape[1] / size[0]
+                    scale_y = img.shape[0] / size[1]
+                    
+                    all_detections.append({
+                        'x_center': (x1 + x2) / 2 * scale_x,
+                        'y_center': (y1 + y2) / 2 * scale_y,
+                        'width': (x2 - x1) * scale_x,
+                        'height': (y2 - y1) * scale_y,
+                        'confidence': conf,
+                        'class': int(cls)
+                    })
         
         # 重複検出の統合
         merged_detections = self.merge_ensemble_detections(all_detections)

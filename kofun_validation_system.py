@@ -13,8 +13,11 @@ from typing import List, Dict, Tuple
 import math
 import pathlib
 
-# Replace yolov5 with ultralytics
-from ultralytics import YOLO
+# YOLOv5のパスを追加
+sys.path.insert(0, os.path.abspath('yolov5'))
+from yolov5.models.common import DetectMultiBackend
+from yolov5.utils.general import check_img_size, non_max_suppression, scale_boxes
+from yolov5.utils.torch_utils import select_device
 
 # Windows で Linux 環境で保存された .pt 内の PosixPath を復元できない問題への対応
 # pickle 復元時に PosixPath を WindowsPath に置き換える
@@ -27,7 +30,7 @@ if os.name == 'nt':
 class KofunValidationSystem:
     def __init__(self, kofun_csv_path="kofun_coordinates_updated.csv"):
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
-        # Remove device selection - ultralytics handles this automatically
+        self.device = select_device('')
         self.model = None
         
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:
@@ -44,8 +47,14 @@ class KofunValidationSystem:
         """YOLOv5モデルを読み込み"""
         print("🔄 Loading YOLOv5 model...")
         
-        # Use ultralytics YOLO instead of yolov5
-        self.model = YOLO(weights_path)
+        self.model = DetectMultiBackend(weights_path, device=self.device)
+        self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
+        self.imgsz = check_img_size((512, 512), s=self.stride)
+        # CUDA 環境では半精度を使用（CPU の場合は自動で無効）
+        self.half = self.device.type != 'cpu'
+        
+        self.model.eval()
+        self.model.warmup(imgsz=(1 if self.pt else 1, 3, *self.imgsz))
         
         print("✅ Model loaded successfully")
     
@@ -172,36 +181,45 @@ class KofunValidationSystem:
         if image is None:
             raise ValueError(f"Cannot read image: {image_path}")
         
-        # 推論実行（ultralytics YOLO）
-        results = self.model(image, conf=0.15, iou=0.55, max_det=30)
+        # 推論実行
+        img = cv2.resize(image, self.imgsz)
+        img = img.transpose((2, 0, 1))[::-1]
+        img = np.ascontiguousarray(img)
+        img = torch.from_numpy(img).to(self.device)
+        img = img.half() if getattr(self, 'half', False) else img.float()
+        img /= 255.0
+        if len(img.shape) == 3:
+            img = img[None]
         
+        # 検出（Renderのタイムアウト回避のため軽量化）
         all_detections = []
+        conf_thresholds = [0.15]
         H, W = image.shape[:2]
         
-        # 結果を処理
-        for result in results:
-            if result.boxes is not None:
-                boxes = result.boxes
-                for box in boxes:
-                    # バウンディングボックス座標を取得
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf = box.conf[0].cpu().numpy()
-                    cls = box.cls[0].cpu().numpy()
-                    
-                    # 正規化座標に変換
-                    x_center = (x1 + x2) / 2 / W
-                    y_center = (y1 + y2) / 2 / H
-                    width = (x2 - x1) / W
-                    height = (y2 - y1) / H
-                    
-                    all_detections.append({
-                        'x_center': x_center,
-                        'y_center': y_center,
-                        'width': width,
-                        'height': height,
-                        'confidence': conf,
-                        'class': int(cls)
-                    })
+        for conf_thres in conf_thresholds:
+            # 通常推論（TTA無効化で高速化）
+            pred = self.model(img, augment=False, visualize=False)
+            pred = non_max_suppression(pred, conf_thres, 0.55, classes=None, max_det=30)
+            
+            # 通常推論の取り込み
+            for i, det in enumerate(pred):
+                if len(det):
+                    det[:, :4] = scale_boxes(img[i].shape[1:], det[:, :4], image.shape).round()
+                    for *xyxy, conf, cls in det:
+                        x1, y1, x2, y2 = xyxy
+                        x_center = (x1 + x2) / 2 / W
+                        y_center = (y1 + y2) / 2 / H
+                        width = (x2 - x1) / W
+                        height = (y2 - y1) / H
+                        all_detections.append({
+                            'x_center': x_center,
+                            'y_center': y_center,
+                            'width': width,
+                            'height': height,
+                            'confidence': conf.item(),
+                            'class': cls.item(),
+                            'threshold': conf_thres
+                        })
         
         # 重複検出の統合
         merged_detections = self.merge_overlapping_detections(all_detections)
