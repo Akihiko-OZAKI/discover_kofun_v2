@@ -1,13 +1,14 @@
 import sys
 import os
-sys.path.insert(0, os.path.abspath('yolov5'))  # これでyolov5がパスに入る
+# Remove yolov5 path insertion since we're using ultralytics
+# sys.path.insert(0, os.path.abspath('yolov5'))  # これでyolov5がパスに入る
 
 from flask import Flask, render_template, request, redirect, jsonify
 from werkzeug.utils import secure_filename
 import cv2
 import numpy as np
-import torch
 import json
+import torch
 
 from xml_to_png import convert_xml_to_png
 from my_utils import parse_latlon_range, bbox_to_latlon, read_yolo_labels
