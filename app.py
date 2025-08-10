@@ -146,6 +146,8 @@ def upload_file():
 
         except Exception as e:
             logger.error(f"Error processing file: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return render_template('index.html', error=f'処理中にエラーが発生しました: {str(e)}')
 
     return render_template('index.html', error='無効なファイル形式です')

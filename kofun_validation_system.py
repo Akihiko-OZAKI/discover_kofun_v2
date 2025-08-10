@@ -29,6 +29,9 @@ if os.name == 'nt':
 
 class KofunValidationSystem:
     def __init__(self, kofun_csv_path="kofun_coordinates_updated.csv"):
+        # Use absolute path to ensure file is found
+        if not os.path.isabs(kofun_csv_path):
+            kofun_csv_path = os.path.join(os.getcwd(), kofun_csv_path)
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
         # Don't load model in __init__ to save memory
         self.device = None
@@ -37,11 +40,17 @@ class KofunValidationSystem:
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:
         """古墳座標データを読み込み"""
         try:
+            if not os.path.exists(csv_path):
+                print(f"⚠️ CSV file not found: {csv_path}")
+                return pd.DataFrame()
+            
             df = pd.read_csv(csv_path, header=None, names=['id', 'latitude', 'longitude'], encoding='utf-8')
             print(f"✅ 古墳座標データを読み込み: {len(df)}件")
             return df
         except Exception as e:
             print(f"❌ 古墳座標データ読み込みエラー: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return pd.DataFrame()
     
     def load_model(self, weights_path='weights/best.pt'):
