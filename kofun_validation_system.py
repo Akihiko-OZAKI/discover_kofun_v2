@@ -30,7 +30,8 @@ if os.name == 'nt':
 class KofunValidationSystem:
     def __init__(self, kofun_csv_path="kofun_coordinates_updated.csv"):
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
-        self.device = select_device('')
+        # Don't load model in __init__ to save memory
+        self.device = None
         self.model = None
         
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:
@@ -47,9 +48,10 @@ class KofunValidationSystem:
         """YOLOv5モデルを読み込み"""
         print("🔄 Loading YOLOv5 model...")
         
+        self.device = select_device('')
         self.model = DetectMultiBackend(weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((512, 512), s=self.stride)
+        self.imgsz = check_img_size((384, 384), s=self.stride)  # さらに小さく
         # CUDA 環境では半精度を使用（CPU の場合は自動で無効）
         self.half = self.device.type != 'cpu'
         
@@ -193,13 +195,13 @@ class KofunValidationSystem:
         
         # 検出（Renderのタイムアウト回避のため軽量化）
         all_detections = []
-        conf_thresholds = [0.2]  # 単一の閾値のみ
+        conf_thresholds = [0.25]  # 閾値を上げて検出数を減らす
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
             # 通常推論（TTA無効化で高速化）
             pred = self.model(img, augment=False, visualize=False)
-            pred = non_max_suppression(pred, conf_thres, 0.55, classes=None, max_det=20)  # 検出数削減
+            pred = non_max_suppression(pred, conf_thres, 0.6, classes=None, max_det=10)  # 検出数さらに削減
             
             # 通常推論の取り込み
             for i, det in enumerate(pred):
@@ -228,7 +230,7 @@ class KofunValidationSystem:
         validated_detections = []
         for detection in merged_detections:
             # 簡易検証：信頼度が一定以上の場合のみ採用
-            if detection['confidence'] >= 0.1:  # 閾値を下げる
+            if detection['confidence'] >= 0.15:  # 閾値を上げる
                 detection['final_confidence'] = detection['confidence']
                 detection['validation_info'] = {
                     'original_confidence': detection['confidence'],

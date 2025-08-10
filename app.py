@@ -96,14 +96,12 @@ def upload_file():
             png_path = os.path.join(app.config['RESULT_FOLDER'], 'converted.png')
             convert_xml_to_png(xml_path, png_path)
 
-            # 最適化された検出システム（グローバルに一度だけ初期化）
+            # 検出システムを毎回初期化（メモリ節約）
             print("🚀 Running optimized detection with enhanced validation...")
-            global _global_validation_system
-            if _global_validation_system is None:
-                _global_validation_system = KofunValidationSystem()
+            validation_system = KofunValidationSystem()
             
             # 最適化された検出を実行
-            enhanced_detections = _global_validation_system.run_enhanced_detection(
+            enhanced_detections = validation_system.run_enhanced_detection(
                 png_path, xml_path, 
                 os.path.join(app.config['RESULT_FOLDER'], 'enhanced_result.png')
             )
