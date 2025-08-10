@@ -39,7 +39,7 @@ def save_dem_as_png(array, output_path):
 # YOLOラベル読み込み
 def read_yolo_labels(txt_path):
     detections = []
-    with open(txt_path, 'r') as f:
+    with open(txt_path, 'r', encoding='utf-8') as f:
         for line in f:
             parts = line.strip().split()
             if len(parts) == 5:

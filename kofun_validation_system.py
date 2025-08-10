@@ -37,7 +37,7 @@ class KofunValidationSystem:
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:
         """古墳座標データを読み込み"""
         try:
-            df = pd.read_csv(csv_path, header=None, names=['id', 'latitude', 'longitude'])
+            df = pd.read_csv(csv_path, header=None, names=['id', 'latitude', 'longitude'], encoding='utf-8')
             print(f"✅ 古墳座標データを読み込み: {len(df)}件")
             return df
         except Exception as e:
