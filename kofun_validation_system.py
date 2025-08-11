@@ -59,12 +59,12 @@ class KofunValidationSystem:
             print(f"Traceback: {traceback.format_exc()}")
             return pd.DataFrame()
     
-    def load_model(self, weights_path='weights/best.pt'):
-        """YOLOv5モデルを読み込み（メモリ最適化版）"""
+    def load_model(self, weights_path='weights/yolov5n.pt'):
+        """YOLOv5nモデルを読み込み（超軽量版）"""
         if self.model is not None:
             return  # 既に読み込まれている場合はスキップ
             
-        print("🔄 Loading YOLOv5 model (memory optimized)...")
+        print("🔄 Loading YOLOv5n model (ultra lightweight)...")
         
         # メモリ使用量を監視
         self.log_memory_usage("Before model loading")
@@ -72,7 +72,7 @@ class KofunValidationSystem:
         self.device = select_device('')
         self.model = DetectMultiBackend(weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((256, 256), s=self.stride)  # さらに小さくしてメモリ削減
+        self.imgsz = check_img_size((224, 224), s=self.stride)  # さらに小さくしてメモリ削減
         # CPU環境では半精度を無効化
         self.half = False  # メモリ削減のため半精度を無効化
         
@@ -81,7 +81,7 @@ class KofunValidationSystem:
         self.model.warmup(imgsz=(1, 3, *self.imgsz))
         
         self.log_memory_usage("After model loading")
-        print("✅ Model loaded successfully (memory optimized)")
+        print("✅ YOLOv5n model loaded successfully (ultra lightweight)")
     
     def log_memory_usage(self, stage: str):
         """メモリ使用量をログ出力"""
@@ -240,16 +240,16 @@ class KofunValidationSystem:
         
         self.log_memory_usage("After image preprocessing")
         
-        # 検出（メモリ削減版）
+        # 検出（超軽量版）
         all_detections = []
-        conf_thresholds = [0.3]  # 閾値を上げて検出数を減らす
+        conf_thresholds = [0.25]  # YOLOv5n用に調整
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
             # 通常推論（TTA無効化で高速化）
             with torch.no_grad():  # メモリ削減
                 pred = self.model(img, augment=False, visualize=False)
-                pred = non_max_suppression(pred, conf_thres, 0.6, classes=None, max_det=5)  # 検出数をさらに削減
+                pred = non_max_suppression(pred, conf_thres, 0.5, classes=None, max_det=3)  # 検出数をさらに削減
             
             # 通常推論の取り込み
             for i, det in enumerate(pred):
