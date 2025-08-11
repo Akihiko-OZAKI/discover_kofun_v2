@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import json
 import torch
+import gc  # ガベージコレクション用
 
 from xml_to_png import convert_xml_to_png
 from my_utils import parse_latlon_range, bbox_to_latlon, read_yolo_labels
@@ -30,10 +31,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Reduce thread usage to save memory/CPU on Render
+# メモリ使用量を大幅に削減
 os.environ.setdefault('OMP_NUM_THREADS', '1')
 os.environ.setdefault('MKL_NUM_THREADS', '1')
 os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
+os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+
+# OpenCVとPyTorchのスレッド数を制限
 try:
     cv2.setNumThreads(1)
 except Exception:
@@ -43,8 +47,15 @@ try:
 except Exception:
     pass
 
+# メモリ効率化のための設定
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
+
+# グローバル変数でモデルを保持（メモリ効率化）
+_global_validation_system = None
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -56,13 +67,37 @@ def draw_detections_on_image(image_path, detections, output_path):
     # 新しいマーキング機能を使用
     return draw_enhanced_detections(image_path, detections, output_path)
 
+def get_validation_system():
+    """メモリ効率化のため、シングルトンパターンでバリデーションシステムを管理"""
+    global _global_validation_system
+    if _global_validation_system is None:
+        logger.info("🔄 Initializing validation system...")
+        _global_validation_system = KofunValidationSystem()
+        # メモリ使用量を監視
+        logger.info(f"📊 Memory usage after initialization: {get_memory_usage()}MB")
+    return _global_validation_system
+
+def get_memory_usage():
+    """メモリ使用量を取得（MB単位）"""
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024
+    except:
+        return 0
+
+def cleanup_memory():
+    """メモリをクリーンアップ"""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    logger.info(f"🧹 Memory cleanup completed. Current usage: {get_memory_usage()}MB")
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         return redirect('/upload')
     return render_template('index.html')
-
-_global_validation_system = None
 
 @app.route('/upload', methods=['GET'])
 def upload_get_redirect():
@@ -70,6 +105,9 @@ def upload_get_redirect():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # メモリ使用量を監視
+    logger.info(f"📊 Memory usage at start: {get_memory_usage()}MB")
+    
     # 古いPNG/JPGファイル削除
     for f in os.listdir(app.config['RESULT_FOLDER']):
         path = os.path.join(app.config['RESULT_FOLDER'], f)
@@ -95,16 +133,22 @@ def upload_file():
             # XML → PNG 変換
             png_path = os.path.join(app.config['RESULT_FOLDER'], 'converted.png')
             convert_xml_to_png(xml_path, png_path)
-
-            # 検出システムを毎回初期化（メモリ節約）
-            print("🚀 Running optimized detection with enhanced validation...")
-            validation_system = KofunValidationSystem()
             
-            # 最適化された検出を実行
+            logger.info(f"📊 Memory usage after XML conversion: {get_memory_usage()}MB")
+
+            # メモリ効率化された検出システムを使用
+            print("🚀 Running memory-optimized detection...")
+            validation_system = get_validation_system()
+            
+            # メモリ使用量を監視しながら検出実行
+            logger.info(f"📊 Memory usage before detection: {get_memory_usage()}MB")
+            
             enhanced_detections = validation_system.run_enhanced_detection(
                 png_path, xml_path, 
                 os.path.join(app.config['RESULT_FOLDER'], 'enhanced_result.png')
             )
+            
+            logger.info(f"📊 Memory usage after detection: {get_memory_usage()}MB")
             
             # 軽量化のためアンサンブルは無効化、直接使用
             final_detections = enhanced_detections
@@ -134,6 +178,9 @@ def upload_file():
             latlon_range = parse_latlon_range(xml_path)
             processed_results = process_detection_results(xml_path, png_path, detections)
 
+            # メモリクリーンアップ
+            cleanup_memory()
+
             return render_template('results.html', 
                                 results=processed_results,
                                 image_path='results/result.png',
@@ -148,6 +195,8 @@ def upload_file():
             logger.error(f"Error processing file: {str(e)}")
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
+            # エラー時もメモリクリーンアップ
+            cleanup_memory()
             return render_template('index.html', error=f'処理中にエラーが発生しました: {str(e)}')
 
     return render_template('index.html', error='無効なファイル形式です')

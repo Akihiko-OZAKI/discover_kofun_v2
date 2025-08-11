@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-古墳座標データを活用した検出精度向上システム
+古墳座標データを活用した検出精度向上システム（メモリ最適化版）
 """
 
 import pandas as pd
@@ -9,6 +9,7 @@ import cv2
 import os
 import sys
 import torch
+import gc
 from typing import List, Dict, Tuple
 import math
 import pathlib
@@ -33,9 +34,14 @@ class KofunValidationSystem:
         if not os.path.isabs(kofun_csv_path):
             kofun_csv_path = os.path.join(os.getcwd(), kofun_csv_path)
         self.kofun_data = self.load_kofun_coordinates(kofun_csv_path)
-        # Don't load model in __init__ to save memory
+        # メモリ効率化のため、モデルは必要時に読み込み
         self.device = None
         self.model = None
+        self.stride = None
+        self.names = None
+        self.pt = None
+        self.imgsz = None
+        self.half = None
         
     def load_kofun_coordinates(self, csv_path: str) -> pd.DataFrame:
         """古墳座標データを読み込み"""
@@ -54,20 +60,45 @@ class KofunValidationSystem:
             return pd.DataFrame()
     
     def load_model(self, weights_path='weights/best.pt'):
-        """YOLOv5モデルを読み込み"""
-        print("🔄 Loading YOLOv5 model...")
+        """YOLOv5モデルを読み込み（メモリ最適化版）"""
+        if self.model is not None:
+            return  # 既に読み込まれている場合はスキップ
+            
+        print("🔄 Loading YOLOv5 model (memory optimized)...")
+        
+        # メモリ使用量を監視
+        self.log_memory_usage("Before model loading")
         
         self.device = select_device('')
         self.model = DetectMultiBackend(weights_path, device=self.device)
         self.stride, self.names, self.pt = self.model.stride, self.model.names, self.model.pt
-        self.imgsz = check_img_size((384, 384), s=self.stride)  # さらに小さく
-        # CUDA 環境では半精度を使用（CPU の場合は自動で無効）
-        self.half = self.device.type != 'cpu'
+        self.imgsz = check_img_size((256, 256), s=self.stride)  # さらに小さくしてメモリ削減
+        # CPU環境では半精度を無効化
+        self.half = False  # メモリ削減のため半精度を無効化
         
         self.model.eval()
-        self.model.warmup(imgsz=(1 if self.pt else 1, 3, *self.imgsz))
+        # ウォームアップを最小限に
+        self.model.warmup(imgsz=(1, 3, *self.imgsz))
         
-        print("✅ Model loaded successfully")
+        self.log_memory_usage("After model loading")
+        print("✅ Model loaded successfully (memory optimized)")
+    
+    def log_memory_usage(self, stage: str):
+        """メモリ使用量をログ出力"""
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            print(f"📊 Memory usage at {stage}: {memory_mb:.1f}MB")
+        except:
+            pass
+    
+    def cleanup_memory(self):
+        """メモリをクリーンアップ"""
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self.log_memory_usage("After cleanup")
     
     def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """2点間の距離を計算（メートル）"""
@@ -174,9 +205,12 @@ class KofunValidationSystem:
     def run_enhanced_detection(self, image_path: str, xml_path: str, 
                               output_path: str = None) -> List[Dict]:
         """
-        古墳座標データを活用した強化検出
+        古墳座標データを活用した強化検出（メモリ最適化版）
         """
-        print(f"🚀 Running enhanced detection with kofun validation...")
+        print(f"🚀 Running enhanced detection with kofun validation (memory optimized)...")
+        
+        # メモリ使用量を監視
+        self.log_memory_usage("Start of detection")
         
         # 画像境界を取得
         from my_utils import parse_latlon_range
@@ -187,30 +221,35 @@ class KofunValidationSystem:
         if self.model is None:
             self.load_model()
         
-        # 画像読み込みと前処理
+        self.log_memory_usage("After model loading")
+        
+        # 画像読み込みと前処理（メモリ効率化）
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Cannot read image: {image_path}")
         
-        # 推論実行
+        # 推論実行（メモリ効率化）
         img = cv2.resize(image, self.imgsz)
         img = img.transpose((2, 0, 1))[::-1]
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
-        img = img.half() if getattr(self, 'half', False) else img.float()
+        img = img.float()  # 半精度を無効化してメモリ削減
         img /= 255.0
         if len(img.shape) == 3:
             img = img[None]
         
-        # 検出（Renderのタイムアウト回避のため軽量化）
+        self.log_memory_usage("After image preprocessing")
+        
+        # 検出（メモリ削減版）
         all_detections = []
-        conf_thresholds = [0.25]  # 閾値を上げて検出数を減らす
+        conf_thresholds = [0.3]  # 閾値を上げて検出数を減らす
         H, W = image.shape[:2]
         
         for conf_thres in conf_thresholds:
             # 通常推論（TTA無効化で高速化）
-            pred = self.model(img, augment=False, visualize=False)
-            pred = non_max_suppression(pred, conf_thres, 0.6, classes=None, max_det=10)  # 検出数さらに削減
+            with torch.no_grad():  # メモリ削減
+                pred = self.model(img, augment=False, visualize=False)
+                pred = non_max_suppression(pred, conf_thres, 0.6, classes=None, max_det=5)  # 検出数をさらに削減
             
             # 通常推論の取り込み
             for i, det in enumerate(pred):
@@ -232,14 +271,20 @@ class KofunValidationSystem:
                             'threshold': conf_thres
                         })
         
-        # 重複検出の統合
+        # メモリクリーンアップ
+        del img, pred
+        self.cleanup_memory()
+        
+        self.log_memory_usage("After detection")
+        
+        # 重複検出の統合（軽量化版）
         merged_detections = self.merge_overlapping_detections(all_detections)
         
         # 古墳座標データで検証・補正（軽量化版）
         validated_detections = []
         for detection in merged_detections:
             # 簡易検証：信頼度が一定以上の場合のみ採用
-            if detection['confidence'] >= 0.15:  # 閾値を上げる
+            if detection['confidence'] >= 0.2:  # 閾値を上げる
                 detection['final_confidence'] = detection['confidence']
                 detection['validation_info'] = {
                     'original_confidence': detection['confidence'],
